@@ -19,11 +19,16 @@ pub fn build(b: *std.Build) void {
         "hidden_visibility",
         "Build the libraries with -fvisibility=hidden",
     ) orelse false;
-    const flags: []const []const u8 = if (hidden_visibility) &.{"-fvisibility=hidden"} else &.{};
-    const pki_flags: []const []const u8 = if (hidden_visibility)
-        &.{ "-fvisibility=hidden", "-D_BORINGSSL_LIBPKI_" }
+    const visibility_flags: []const []const u8 = if (hidden_visibility) &.{"-fvisibility=hidden"} else &.{};
+    // Windows: NOCRYPT/NOGDI keep <windows.h> from defining X509_NAME and
+    // friends, which clash with the OpenSSL API; the perlasm sources are
+    // not wired up for the COFF/MSVC ABI, so use the C implementations.
+    const windows_flags: []const []const u8 = if (target.result.os.tag == .windows)
+        &.{ "-DNOCRYPT", "-DNOGDI", "-DOPENSSL_NO_ASM" }
     else
-        &.{"-D_BORINGSSL_LIBPKI_"};
+        &.{};
+    const flags = std.mem.concat(b.allocator, []const u8, &.{ visibility_flags, windows_flags }) catch @panic("OOM");
+    const pki_flags = std.mem.concat(b.allocator, []const u8, &.{ visibility_flags, &.{"-D_BORINGSSL_LIBPKI_"}, windows_flags }) catch @panic("OOM");
 
     const ssl_source = b.dependency("ssl", .{});
 
